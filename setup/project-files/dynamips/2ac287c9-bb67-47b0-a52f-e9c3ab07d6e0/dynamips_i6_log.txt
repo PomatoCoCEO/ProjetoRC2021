@@ -1,0 +1,22 @@
+Apr 26 10:58:51.824 HYPERVISOR: Release 0.2.21-amd64/Linux (tag 2019071212)
+Apr 26 10:58:51.824 HYPERVISOR: Started on IP = localhost, TCP port = 55723.
+Apr 26 10:58:51.831 HYPERVISOR: exec_cmd: hypervisor version 
+Apr 26 10:58:51.832 HYPERVISOR: exec_cmd: hypervisor working_dir /media/sf_RC/Projeto/setup/project-files/dynamips 
+Apr 26 10:58:51.833 GENERAL: working_dir=/media/sf_RC/Projeto/setup/project-files/dynamips
+Apr 26 10:58:51.834 HYPERVISOR: exec_cmd: hypervisor working_dir /media/sf_RC/Projeto/setup/project-files/dynamips/b8ab3dd5-c8c3-4a8e-bd5c-e17bdbbfd432 
+Apr 26 10:58:51.835 GENERAL: working_dir=/media/sf_RC/Projeto/setup/project-files/dynamips/b8ab3dd5-c8c3-4a8e-bd5c-e17bdbbfd432
+Apr 26 10:58:51.836 HYPERVISOR: exec_cmd: vm create R1_2 4 c2600 
+Apr 26 10:58:51.853 VM: VM R1_2 created.
+Apr 26 10:58:51.854 HYPERVISOR: exec_cmd: vm set_con_tcp_port R1_2 5016 
+Apr 26 10:58:51.856 HYPERVISOR: exec_cmd: c2600 get_mac_addr R1_2 
+Apr 26 10:58:51.858 HYPERVISOR: exec_cmd: vm get_status R1_2 
+Apr 26 10:58:51.859 HYPERVISOR: exec_cmd: vm set_idle_pc R1_2 0x81879690 
+Apr 26 10:58:51.862 HYPERVISOR: exec_cmd: vm set_ios R1_2 /home/user/GNS3/images/IOS/c2600.image 
+Apr 26 10:58:51.864 HYPERVISOR: exec_cmd: c2600 set_iomem R1_2 5 
+Apr 26 10:58:51.865 HYPERVISOR: exec_cmd: c2600 set_mac_addr R1_2 c804.10e7.0000 
+Apr 26 10:58:51.867 HYPERVISOR: exec_cmd: vm set_ram R1_2 160 
+Apr 26 10:58:51.869 HYPERVISOR: exec_cmd: vm get_status R1_2 
+Apr 26 10:58:51.871 HYPERVISOR: exec_cmd: vm slot_add_binding R1_2 1 0 NM-1FE-TX 
+Apr 26 10:58:51.873 HYPERVISOR: exec_cmd: vm set_sparse_mem R1_2 1 
+Apr 26 10:58:51.875 HYPERVISOR: exec_cmd: vm get_status R1_2 
+Apr 26 10:58:51.877 HYPERVISOR: exec_cmd: vm slot_add_binding R1_2 0 16 WIC-1T 

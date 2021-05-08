@@ -1,0 +1,6 @@
+Apr 26 10:58:51.663 HYPERVISOR: Release 0.2.21-amd64/Linux (tag 2019071212)
+Apr 26 10:58:51.663 HYPERVISOR: Started on IP = localhost, TCP port = 57269.
+Apr 26 10:58:51.674 HYPERVISOR: exec_cmd: hypervisor version 
+Apr 26 10:58:51.675 HYPERVISOR: exec_cmd: hypervisor working_dir /media/sf_RC/Projeto/setup/project-files/dynamips 
+Apr 26 10:58:51.675 GENERAL: working_dir=/media/sf_RC/Projeto/setup/project-files/dynamips
+Apr 26 10:58:51.676 HYPERVISOR: exec_cmd: ethsw create S2 
