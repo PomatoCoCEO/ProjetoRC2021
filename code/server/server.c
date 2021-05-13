@@ -13,9 +13,9 @@
 #include <signal.h>
 #include <errno.h>
 
-#define SERVER_UDP_PORT 9000
-#define SERVER_TCP_PORT 9000
-#define SERVER_IP "129.136.212.251"
+#define SERVER_UDP_PORT 9001
+#define SERVER_TCP_PORT 9001
+#define SERVER_IP "10.0.2.15"// "129.136.212.251"
 #define BUF_SIZE 1024
 #define NO_MAX_USERS 10
 #define CONFIG_FILE "data/users.dat"
@@ -109,7 +109,7 @@ int process_command(int admin_fd_socket, char instruction[])
         if (next_token == NULL)
         {
             //wrong command
-            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo> ");
+            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
             return 2;
         }
         strcpy(new.userId, next_token); // ID
@@ -117,7 +117,7 @@ int process_command(int admin_fd_socket, char instruction[])
         if (next_token == NULL) // IP
         {
             //wrong command
-            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo> ");
+            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
             return 2;
         }
         inet_pton(AF_INET, next_token, &(new.ip_address.sin_addr));
@@ -127,7 +127,7 @@ int process_command(int admin_fd_socket, char instruction[])
         if (next_token == NULL)
         {
             //wrong command
-            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo> ");
+            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
             return 2;
         }
         strcpy(new.password, next_token);
@@ -138,7 +138,7 @@ int process_command(int admin_fd_socket, char instruction[])
             if (next_token == NULL)
             {
                 //wrong command
-                wrong_command(admin_fd_socket,"Wrond command. Use: ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>");
+                wrong_command(admin_fd_socket,"Wrond command. Use: ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
                 break;
             }
             if (strcasecmp(next_token, "YES") == 0)
@@ -150,7 +150,7 @@ int process_command(int admin_fd_socket, char instruction[])
             }
             else
             {
-                wrong_command(admin_fd_socket, "Use yes or no for permissions!");
+                wrong_command(admin_fd_socket, "Use yes or no for permissions!\n");
                 break;
             }
         }
@@ -169,7 +169,7 @@ int process_command(int admin_fd_socket, char instruction[])
         if (next_token == NULL)
         {
             //wrong command
-            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo> ");
+            wrong_command(admin_fd_socket,"Use ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
             return 2;
         }
 
@@ -189,7 +189,7 @@ int process_command(int admin_fd_socket, char instruction[])
     }
     else
     {
-        wrong_command(admin_fd_socket,"Use ADD, LIST, DEL or QUIT!");
+        wrong_command(admin_fd_socket,"Use ADD, LIST, DEL or QUIT!\n");
         //wrong command
         return 0;
     }
@@ -245,7 +245,7 @@ void receive_admin()
     if (bind(admin_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         error_msg("na funcao bind");
     //only one admin
-    if (listen(admin_fd, 1) < 0)
+    if (listen(admin_fd, 2) < 0)
         error_msg("na funcao listen");
     admin_addr_size = sizeof(admin_addr);
 
@@ -257,18 +257,22 @@ void receive_admin()
 
     // while (1) // supõe-se que
     int ret;
+    int admin_socket_fd;
+    admin_socket_fd = accept(admin_fd, (struct sockaddr *)&(admin_addr), (socklen_t *)&admin_addr_size);
+    char buffer[256];
     do {
-        int admin_socket_fd;
+        
 
         while (waitpid(-1, NULL, WNOHANG) > 0)
             ;
 
-        admin_socket_fd = accept(admin_fd, (struct sockaddr *)&(admin_addr), (socklen_t *)&admin_addr_size);
-        char buffer[256];
+        
         int g = read(admin_socket_fd, buffer, 256);
         buffer[g]='\0';
         ret = process_command(admin_socket_fd, buffer);
+        printf("ret = %d\n", ret);
     } while(ret !=1);
+    write_info_to_file();
 
     // accept commands
 }
@@ -308,7 +312,8 @@ void get_info_from_file(){
 void write_info_to_file(){
     FILE * config= fopen (CONFIG_FILE, "w");
     char ip[16];
-    for (int i=0; i< shmem->no_users; ++i){
+    printf("Number of users: %d\n", shmem->no_users);
+    for (int i=0; i<shmem->no_users; ++i){
         inet_ntop( AF_INET,&((shmem->users[i].ip_address.sin_addr)), ip, INET_ADDRSTRLEN );
         fprintf(config, "%s %s %s %d\n", shmem->users[i].userId, ip, shmem->users[i].password, (int) shmem->users[i].permissions );
     }
@@ -330,8 +335,6 @@ void get_shared_memory()
 
 
 void cleanup(){
-
-
     write_info_to_file();
 }
 
@@ -344,7 +347,7 @@ int main(int argc, char **argv)
     get_info_from_file();
     printf("Boo\n");
     if(argc!=4) {
-        fprintf(stderr, "Usage: <client-port> <config-port> <configFile>\n");
+        fprintf(stderr, "Usage: ./server <client-port> <config-port> <configFile>\n");
         return 1;
     }
     int client_port, config_port;
@@ -354,7 +357,7 @@ int main(int argc, char **argv)
     strcpy(configFile, argv[3]);
     if ((admin_pid = fork()) == 0)
     {
-        receive_admin();
+        receive_admin(); // aqui n será melhor while(1) receive_admin(); ??
         exit(0);
     }
     // wait for client connections -> INITIALISE UDP socket
