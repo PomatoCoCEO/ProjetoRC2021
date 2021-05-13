@@ -35,6 +35,10 @@ int process_command(int admin_fd_socket, char instruction[])
     printf("Command: \"%s\"\n", command);
     if (strcmp(command, "LIST") == 0)
     {
+        if(shmem->no_users==0) {
+            wrong_command(admin_fd_socket,"No users in database\n");
+            return 2;
+        }
         char msg[]="User-id IP Password Cliente-Servidor P2P Grupo\n";
         write(admin_fd_socket, msg, strlen(msg));
         for(int i = 0; i<shmem->no_users; i++) {
@@ -80,7 +84,7 @@ int process_command(int admin_fd_socket, char instruction[])
             {
                 //wrong command
                 wrong_command(admin_fd_socket,"Wrond command. Use: ADD <User-id> <IP> <Password> <Cliente-Servidor> <P2P> <Grupo>\n");
-                break;
+                return 2;
             }
             if (strcasecmp(next_token, "YES") == 0)
             {
@@ -92,14 +96,19 @@ int process_command(int admin_fd_socket, char instruction[])
             else
             {
                 wrong_command(admin_fd_socket, "Use yes or no for permissions!\n");
-                break;
+                return 2;
             }
+        }
+        if (strtok(NULL, " \n\r")!= NULL){
+             wrong_command(admin_fd_socket, "Too much information\n");
+            return 2;
         }
         new.permissions = perm;
         // write "User added:"
         for(int i = 0; i<shmem->no_users;i++) {
             if(strcmp(new.userId , shmem->users[i].userId)==0) {
                 wrong_command(admin_fd_socket, "The user you are trying to add already exists!\n");
+                return 2;
             }
         }
         shmem->users[shmem->no_users++]=new;
@@ -137,7 +146,7 @@ int process_command(int admin_fd_socket, char instruction[])
     {
         wrong_command(admin_fd_socket,"Use ADD, LIST, DEL or QUIT!\n");
         //wrong command
-        return 0;
+        return 2;
     }
 }
 

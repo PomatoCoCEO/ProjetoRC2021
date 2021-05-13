@@ -1,31 +1,4 @@
-
-#include "admin.h"
 #include "server.h"
-
-// #define SERVER_UDP_PORT 9001
-// #define SERVER_TCP_PORT 9001
-#define SERVER_IP "10.0.2.15"// "129.136.212.251"
-#define BUF_SIZE 1024
-#define NO_MAX_USERS 10
-#define CONFIG_FILE "data/users.dat"
-int client_port, config_port;
-
-
-
-void write_info_to_file();
-void get_info_from_file();
-void get_shared_memory();
-void receive_admin();
-int remove_from_list(char * name);
-int process_command(int admin_fd_socket, char instruction[]);
-void print_user_info(int fd, user_info* user);
-void wrong_command(int fd, char *error_msg);
-void error_msg(char *msg);
-
-
-
-
-
 
 void error_msg(char *msg)
 {
@@ -87,13 +60,59 @@ void get_shared_memory()
 }
 
 
-void cleanup(){
-    
+int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
+    int i;
+    char* buf = msg->msg;
+    for(i = 0; i<shmem->no_users; i++) {
+        if(strcmp(shmem->users[i].userId, buf)==0) {
+            if(shmem->users[i].ip_address.sin_addr.s_addr == client_ip->sin_addr.s_addr) {
+                shmem->users[i].ip_address = *client_ip;
+                return i;
+            }
+            return -1;
+        }
+    }
+    return -2;
+} 
+
+void process_client(int pos, struct sockaddr_in client_ip,int sock_fd) {
+    // char password[];
+    // ! create new socket for this client
+    msg_t password, ans;
+    struct sockaddr_in cp = client_ip;
+    socklen_t slen = sizeof(cp);
+    // if(recvfrom(sock_fd,&password, sizeof(password),&cp, &slen)==-1) {
+    //     error_msg("Problems receiving password");
+    // }
+    if(msgrcv(msqid, &password, sizeof(password)-sizeof(long), pos+1, 0) == -1) {
+        error_msg("Erro na receção da message queue ");
+    }
+
+    if(strcmp(password.msg, shmem->users[pos].password)!=0) {
+        msg_t password_incorrect;
+        sprintf(password_incorrect.msg, "PASSWORD INCORRECT");
+        sendto(sock_fd, &password_incorrect, sizeof(password_incorrect),0, (struct sockaddr*) &(shmem->users[pos].ip_address), slen);
+        close(sock_fd);
+        return;
+    }
+    int perm = (int) shmem->users[pos].permissions;
+    sprintf(ans.msg, "%d\n",perm);
+    sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+    while(1){
+        // "P2P" "C2S" "GROUP"
+        msg_t type;
+        if(msgrcv(msqid, &type, sizeof(type)-sizeof(long), pos+1, 0) == -1) {
+            error_msg("Problems receiving password");
+        }
+        // assuming client verifies whether type is allowed
+        
+    }
 }
 
 int main(int argc, char **argv)
 {
-    struct sockaddr_in si_server;
+    struct sockaddr_in si_server, si_client;
+    socklen_t slen = sizeof(si_client);
     printf("Boo\n");
     get_shared_memory();
     printf("Boo\n");
@@ -115,7 +134,11 @@ int main(int argc, char **argv)
     }
     // wait for client connections -> INITIALISE UDP socket
     // TODO udp connection
-
+    if((msqid = msgget(IPC_PRIVATE, IPC_CREAT|0766))<0) {
+        error_msg("Erro na criação da message queue ");
+        // cleanup();
+        exit(1);
+    }
     // Cria um socket para recepção de pacotes UDP
     if ((sock_udp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         error_msg("Erro na criação do socket");
@@ -123,17 +146,58 @@ int main(int argc, char **argv)
     // Preenchimento da socket address structure
     si_server.sin_family = AF_INET;
     si_server.sin_port = htons(client_port);
-    si_server.sin_addr.s_addr = htonl(INADDR_ANY);
+    inet_pton(AF_INET, SERVER_IP, &(si_server.sin_addr));
 
     // Associa o socket à informação de endereço
     if (bind(sock_udp, (struct sockaddr *)&si_server, sizeof(si_server)) == -1)
         error_msg("Erro no bind");
+    
+    while (1) {
+        // char buf[256];
+        msg_t buf, ans;
+        if(recvfrom(sock_udp, &buf, sizeof(msg_t),0,(struct sockaddr *) &si_client, &slen) == -1) {
+		    error_msg("Erro no recvfrom");
+		    exit(1);
+		}
+        if(buf.userNo !=0) {
+            if(msgsnd(msqid, &buf, sizeof(buf)-sizeof(long), 0) == -1) {
+                error_msg("Problemas no envio pela message queue: ");
+            }
+        }
+        else{
+            int ret = verify_userId(&buf, &si_client);
+            
+            switch(ret) {
+                case -1:
+                    sprintf(ans.msg, "IP INCORRECT");
+                    sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &si_client, slen);
+                    break;
+                case -2:
+                    sprintf(ans.msg, "NONEXISTENT USER");
+                    sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &si_client, slen);
+                    break;
+                default:
+                    sprintf(ans.msg, "OK");
+                    ans.userNo = ret+1; // beware of ZERO
+                    sendto(sock_udp, &ans, sizeof(ans), 0, (struct sockaddr *)&si_client, slen);
+                    // maybe save pid
+                    if(fork()==0){
+                        // deal_with_client
+                        process_client(ret, si_client, sock_udp);
+                        exit(0);
+                    } 
+                    break;
+            }
+            // Para ignorar o restante conteúdo (anterior do buffer)
+            
 
-    while (1)
-    {
-        // ? receive client stuff
+            // sleep(1);
+        }
     }
 
 
     return 0;
 }
+
+
+

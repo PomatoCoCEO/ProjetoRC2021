@@ -14,9 +14,15 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 #include <signal.h>
 #include <errno.h>
 
+#define SERVER_IP "10.0.2.15"// "129.136.212.251"
+#define BUF_SIZE 1024
+#define NO_MAX_USERS 10
+#define CONFIG_FILE "data/users.dat"
 
 
 typedef struct
@@ -34,13 +40,15 @@ typedef struct
 
 } shm_t;
 
+typedef struct {
+    long userNo;
+    char msg[256];
+} msg_t;
+
 
 // #define SERVER_UDP_PORT 9001
 // #define SERVER_TCP_PORT 9001
-#define SERVER_IP "10.0.2.15"// "129.136.212.251"
-#define BUF_SIZE 1024
-#define NO_MAX_USERS 10
-#define CONFIG_FILE "data/users.dat"
+
 
 
 
@@ -57,7 +65,7 @@ void error_msg(char *msg);
 
 
 pid_t admin_pid;
-int sock_udp;
+int sock_udp, msqid;
 shm_t *shmem;
 int client_port, config_port;
 
