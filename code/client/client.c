@@ -35,7 +35,7 @@ int login() {
     printf("Enter your username.\n");
     scanf("%s",msg.msg);
     while(getchar()!='\n'); // avoid any other spaces & such
-    
+    msg.userNo = 0; 
     if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
         error_msg("no envio de mensagem");
         return 2;
@@ -55,11 +55,10 @@ int login() {
         else{
             printf("Wrong password! Try again\n");
         }
-    } else if(strcmp(msg.msg, "INCORRECT IP") == 0){ // exit
+    } else if(strcmp(msg.msg, "IP INCORRECT") == 0){ // exit
         printf("User logging in from wrong ip address!\n");
-    } else if(strcmp(msg.msg,"NONEXISTENT USER")){
+    } else if(strcmp(msg.msg,"NONEXISTENT USER")==0){
         printf("User is nonexistent. Try again.\n");
-        
     }
     return 1;
 }
@@ -108,8 +107,6 @@ int main(int argc, char** argv) { // ./client <server-address> <port>
         printf("Usage: ./client <server-address> <server-port>\n");
         return 0;
     }
-    struct sockaddr_in si_server;
-    socklen_t slen = sizeof(si_server);
     bzero((void *) &si_server, sizeof(si_server));
     si_server.sin_family = AF_INET;
     inet_pton(AF_INET, argv[1], &(si_server.sin_addr));

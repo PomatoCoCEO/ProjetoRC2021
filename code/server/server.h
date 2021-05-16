@@ -19,7 +19,7 @@
 #include <signal.h>
 #include <errno.h>
 
-#define SERVER_IP "10.0.2.15"// "129.136.212.251"
+#define SERVER_IP "10.90.0.2" // "129.136.212.251"
 #define BUF_SIZE 1024
 #define NO_MAX_USERS 10
 #define CONFIG_FILE "data/users.dat"

@@ -63,10 +63,13 @@ void get_shared_memory()
 int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
     int i;
     char* buf = msg->msg;
+    printf("Username received: \"%s\"\n", buf);
     for(i = 0; i<shmem->no_users; i++) {
+	    printf("Comparing against \"%s\"\n", shmem->users[i].userId);
         if(strcmp(shmem->users[i].userId, buf)==0) {
             if(shmem->users[i].ip_address.sin_addr.s_addr == client_ip->sin_addr.s_addr) {
                 shmem->users[i].ip_address = *client_ip;
+		printf("Returning %d...\n", i);
                 return i;
             }
             return -1;
@@ -160,13 +163,14 @@ int main(int argc, char **argv)
 		    exit(1);
 		}
         if(buf.userNo !=0) {
+		printf("NÃmero da mensagem: %ld\n", buf.userNo); 
             if(msgsnd(msqid, &buf, sizeof(buf)-sizeof(long), 0) == -1) {
                 error_msg("Problemas no envio pela message queue: ");
             }
         }
         else{
             int ret = verify_userId(&buf, &si_client);
-            
+           printf("Value returned:%d\n", ret); 
             switch(ret) {
                 case -1:
                     sprintf(ans.msg, "IP INCORRECT");
@@ -198,6 +202,5 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
 
 
