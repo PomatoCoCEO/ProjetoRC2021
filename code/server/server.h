@@ -31,6 +31,7 @@ typedef struct
     char password[256];
     struct sockaddr_in ip_address;
     unsigned char permissions : 3; // 0 0 0 -> 1 1 1
+    unsigned char online:1;
 } user_info;
 
 typedef struct
@@ -44,6 +45,13 @@ typedef struct {
     long userNo;
     char msg[256];
 } msg_t;
+
+typedef struct {
+    struct sockaddr_in ip_address;
+    char msg[256];
+    unsigned char online:1;
+}client_info;
+
 
 
 // #define SERVER_UDP_PORT 9001

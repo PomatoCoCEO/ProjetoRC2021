@@ -20,10 +20,7 @@ int authentication(){
     if(sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
         error_msg("no envio de mensagem");
     }
-    
-    if(recvfrom(sock_fd, &msg, sizeof(msg_t) , 0, (struct sockaddr*) &si_server, &slen)==-1) {
-        error_msg("na receção da mensagem");
-    }
+    if(receive_msg()!=0) return -1;
     if(strcmp(msg.msg, "PASSWORD INCORRECT") == 0) {
         return 2;
     }
@@ -40,11 +37,7 @@ int login() {
         error_msg("no envio de mensagem");
         return 2;
     }
-
-    if(recvfrom(sock_fd, &msg, sizeof(msg_t) , 0, (struct sockaddr*) &si_server, &slen)==-1) {
-        error_msg("na receção da mensagem");
-        return 2;
-    }
+    if(receive_msg()!=0) return 2;
 
     if(strcmp(msg.msg, "OK")==0) {
         // handle type of communication
@@ -62,8 +55,6 @@ int login() {
     }
     return 1;
 }
-
-
 
 void show_permissions() {
     if(allowed == 0){
@@ -101,6 +92,8 @@ int menu() {
     return ans;
 }
 
+
+
 int main(int argc, char** argv) { // ./client <server-address> <port>
     // greetings to user
     if(argc<3) {
@@ -131,15 +124,15 @@ int main(int argc, char** argv) { // ./client <server-address> <port>
                 break;
             case 1:
                 // C2S
-                // client_to_server();
+                client_to_server();
                 break;
             case 2:
                 // P2P
-                // peer_to_peer();
+                peer_to_peer();
                 break;
             case 3:
                 // GROUP
-                // group_comm();
+                group_comm();
                 break;
         }
     } while(res!=0);
@@ -147,7 +140,158 @@ int main(int argc, char** argv) { // ./client <server-address> <port>
     
     // user states which kind of communication he wants to engage on
 
+
     
 
     return 0;
 }
+
+int receive_msg() {
+    while(1){
+        // loop until receiving a message that's not from a user (C2S, P2P, GROUP)
+        if(recvfrom(sock_fd, &msg, sizeof(msg_t) , 0, (struct sockaddr*) &si_server, &slen)==-1) {
+            error_msg("na receção da mensagem");
+            return -1;
+        }
+        if (strstr(msg.msg,"NEW MESSAGE")!=NULL) {
+            printf("%s\n", msg.msg);
+            // continue;
+        }
+        else 
+            return 0;
+        // else continues... 
+    }
+}
+
+
+
+int client_to_server(){
+    
+    sprintf(msg.msg, "C2S");
+    if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+        error_msg("no envio de mensagem");
+        return 2;
+    }
+    if(receive_msg()!=0) return 2;
+    if(strcmp(msg.msg, "DESTINATION USER")==0) {
+        printf("Enter username of destination user.\n");
+        scanf("%s", msg.msg);
+        while(getchar()!='\n');
+        if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+            error_msg("no envio de mensagem");
+            return 2;
+        }
+    }else{
+        // erro
+    }
+
+    if(receive_msg()!=0) return 2;
+    if(strcmp(msg.msg, "USER NOT FOUND")==0){
+        printf("Username not found\n");
+        return 1;
+    }
+    else if(strcmp(msg.msg, "USER OFFLINE")==0){
+        printf("Username not online\n");
+        return 1;
+    }
+    else if(strcmp(msg.msg, "ENTER MESSAGE")==0){
+        printf("Enter message to send (max. 200 characters)\n");
+        fgets(msg.msg, 200, stdin);
+        if(sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+            error_msg("no envio de mensagem");
+            return 2;
+        }
+        return 0;
+    }
+    else{
+        //erro
+    }
+
+}
+
+
+int peer_to_peer(){
+
+    sprintf(msg.msg, "P2P");
+    if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+        error_msg("no envio de mensagem");
+        return 2;
+    }
+
+    if(receive_msg()!=0) return 2;
+    if(strcmp(msg.msg, "DESTINATION USER")==0) {
+        printf("Enter username of destination user.\n");
+        scanf("%s", msg.msg);
+        while(getchar()!='\n');
+        if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+            error_msg("no envio de mensagem");
+            return 2;
+        }
+    }else{
+        // erro
+    }
+
+    if(receive_msg()!=0) return 2;
+    if(strcmp(msg.msg, "USER NOT FOUND")==0){
+        printf("Username not found\n");
+        return 1;
+    }
+    else if(strcmp(msg.msg, "USER OFFLINE")==0){
+        printf("Username not online\n");
+        return 1;
+    }
+    else if(strstr(msg.msg, "IP_ADDRESS")!=NULL){ // "IP_ADDRESS <192.136.212.129>:<9000>"
+
+        struct sockaddr_in si_dest;
+        socklen_t slen = sizeof(si_server);
+        char * token =strtok(msg.msg, " :");
+        token= strtok(NULL, " :");
+        int portNo;
+        if (token == NULL){
+            //erro
+            return 1;
+        }
+    
+        bzero((void *) &si_server, sizeof(si_server));
+        si_dest.sin_family = AF_INET;
+            
+        if(inet_pton(AF_INET, token, &(si_dest.sin_addr))!=1) {
+            error_msg("na conversão de endereço IP");
+            return 2;
+        }
+        token= strtok(NULL, " :");
+        sscanf(token, "%d", &portNo); // allows for error correction & detection
+    
+        if (token == NULL){
+            //erro
+            return 1;
+        }
+        
+        si_dest.sin_port = htons((short) portNo);
+        //send
+
+        printf("Enter message to send (max. 200 characters)\n");
+        // scanf("%s", msg.msg);
+        fgets(msg.msg, 200, stdin);
+        
+        msg.msg[200]='\0';
+        if( sendto(sock_fd, &msg, sizeof(msg_t),0, (struct sockaddr*)&si_server, slen)==-1) {
+            error_msg("no envio de mensagem");
+            return 2;
+        }
+        return 0;
+    }
+    else{
+        //erro
+    }
+}
+
+
+
+int group_comm(){
+
+
+}
+
+
+

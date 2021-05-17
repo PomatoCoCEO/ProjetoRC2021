@@ -11,7 +11,6 @@ void wrong_command(int fd, char *error_msg) // answer to client
     write(fd, error_msg, 1 + strlen(error_msg));
 }
 
-
 void get_info_from_file(){
     
     FILE * config= fopen (CONFIG_FILE, "r");
@@ -44,8 +43,6 @@ void get_info_from_file(){
     fclose(config);
 }
 
-
-
 void get_shared_memory()
 { // shared memory to go between processes
     int shmid = shmget(IPC_PRIVATE, sizeof(shm_t), IPC_CREAT | IPC_EXCL | 0766);
@@ -59,17 +56,32 @@ void get_shared_memory()
     }
 }
 
+void send_msg_to_user(int pos, int pos_dest, msg_t * msg) {
+    // pos está correto
+    char buf[256];
+    bzero(buf, sizeof(buf));
+    sprintf(buf, "NEW MESSAGE FROM %s: %s",shmem->users[pos].userId, msg->msg);
+    sendto(sock_udp, &buf, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos_dest].ip_address), slen);
+}
+
+
 
 int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
     int i;
     char* buf = msg->msg;
+    #ifdef DEBUG_LOGIN
     printf("Username received: \"%s\"\n", buf);
+    #endif
     for(i = 0; i<shmem->no_users; i++) {
+        #ifdef DEBUG_LOGIN
 	    printf("Comparing against \"%s\"\n", shmem->users[i].userId);
+        #endif
         if(strcmp(shmem->users[i].userId, buf)==0) {
             if(shmem->users[i].ip_address.sin_addr.s_addr == client_ip->sin_addr.s_addr) {
                 shmem->users[i].ip_address = *client_ip;
-		printf("Returning %d...\n", i);
+                #ifdef DEBUG_LOGIN
+		        printf("Returning %d...\n", i);
+                #endif
                 return i;
             }
             return -1;
@@ -77,6 +89,52 @@ int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
     }
     return -2;
 } 
+
+int find_user(msg_t* msg) {
+    for(int i = =; i<shmem->users; i++) {
+        if(strcmp(shmem->users[i].userId, buf)==0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void handle_c2s(int pos, msg_t* ans, int sock_fd) {
+    sprintf(ans.msg, "DESTINATION USER");
+    sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+
+    if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
+        error_msg("Erro na receção da message queue ");
+        return;
+    }
+    // processar -> int find_user
+    int pos_dest = find_user(ans);
+    if(pos_dest == -1) {
+        sprintf(ans.msg, "USER NOT FOUND");
+        sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+        return;
+    }else{
+        if(shmem->users[pos_dest].online)
+        {
+            sprintf(ans.msg, "ENTER MESSAGE");
+            sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+            if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
+                error_msg("Erro na receção da message queue da mensagem");
+                return;
+            }
+
+            send_msg_to_user(pos_src, pos_dest, ans ); // NEW MESSAGE from paulocorte: (...)
+
+        } else{
+            sprintf(ans.msg, "USER OFFLINE");
+            sendto(sock_udp, &ans, sizeof(ans),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+            return;
+        }
+    }
+        
+}
+
+
 
 void process_client(int pos, struct sockaddr_in client_ip,int sock_fd) {
     // char password[];
@@ -105,8 +163,23 @@ void process_client(int pos, struct sockaddr_in client_ip,int sock_fd) {
         // "P2P" "C2S" "GROUP"
         msg_t type;
         if(msgrcv(msqid, &type, sizeof(type)-sizeof(long), pos+1, 0) == -1) {
-            error_msg("Problems receiving password");
+            error_msg("Outra coisa qualquer");
         }
+    
+        if(strcmp(type.msg, "P2P")==0) {
+            
+        }
+        else if(strcmp(type.msg, "C2S")==0) {
+            // client to server
+            handle_c2s(pos, &ans, sock_fd);
+            
+        } else if(strcmp(type.msg, "GROUP")==0) { // MULTICASTING
+            
+        }else{
+            // erro
+        }
+        
+
         // assuming client verifies whether type is allowed
         
     }
@@ -163,14 +236,14 @@ int main(int argc, char **argv)
 		    exit(1);
 		}
         if(buf.userNo !=0) {
-		printf("N�mero da mensagem: %ld\n", buf.userNo); 
+		printf("N�mero da mensagem: %ld\n", buf.userNo); 
             if(msgsnd(msqid, &buf, sizeof(buf)-sizeof(long), 0) == -1) {
                 error_msg("Problemas no envio pela message queue: ");
             }
         }
         else{
             int ret = verify_userId(&buf, &si_client);
-           printf("Value returned:%d\n", ret); 
+            printf("Value returned:%d\n", ret); 
             switch(ret) {
                 case -1:
                     sprintf(ans.msg, "IP INCORRECT");
@@ -195,11 +268,9 @@ int main(int argc, char **argv)
             // Para ignorar o restante conteúdo (anterior do buffer)
             
 
-            // sleep(1);
+            
         }
     }
-
-
     return 0;
 }
 

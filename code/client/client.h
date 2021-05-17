@@ -23,3 +23,10 @@ msg_t msg;
 struct sockaddr_in si_server;
 socklen_t slen = sizeof(si_server);
 const char* permTypes[] = {"Client-Server", "P2P" , "GROUP"};
+
+
+
+
+int client_to_server();
+int peer_to_peer();
+int group_comm();
