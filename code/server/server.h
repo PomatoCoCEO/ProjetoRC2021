@@ -22,6 +22,7 @@
 #define SERVER_IP "10.90.0.2" // "129.136.212.251"
 #define BUF_SIZE 1024
 #define NO_MAX_USERS 10
+#define NO_MAX_GROUPS 20
 #define CONFIG_FILE "data/users.dat"
 
 
@@ -34,23 +35,31 @@ typedef struct
     unsigned char online:1;
 } user_info;
 
+typedef struct {
+    struct sockaddr_in ip_address;
+    char name[256];
+} group_info;
+
 typedef struct
 {
     user_info users[NO_MAX_USERS];
     int no_users;
-
+    group_info groups[NO_MAX_GROUPS];
+    int no_groups;
 } shm_t;
 
 typedef struct {
     long userNo;
     char msg[256];
 } msg_t;
-
+/*
 typedef struct {
     struct sockaddr_in ip_address;
     char msg[256];
     unsigned char online:1;
 }client_info;
+*/
+
 
 
 

@@ -1,5 +1,5 @@
 CC = gcc
-FLAGS = -Wall
+FLAGS = -Wall -pthread
 PROG = client
 OBJS = client.o
 
