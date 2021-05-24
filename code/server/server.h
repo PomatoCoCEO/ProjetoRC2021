@@ -76,5 +76,6 @@ pid_t admin_pid;
 int sock_udp, msqid;
 shm_t *shmem;
 int client_port, config_port;
+socklen_t slen;
 
 #endif

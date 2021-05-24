@@ -18,7 +18,7 @@ typedef struct {
     char msg[256];
 } msg_t;
 
-int sock_fd, allowed;
+int sock_fd, allowed, no_user;
 msg_t msg;
 struct sockaddr_in si_server;
 socklen_t slen = sizeof(si_server);
@@ -27,6 +27,7 @@ const char* permTypes[] = {"Client-Server", "P2P" , "GROUP"};
 
 
 
+int receive_msg();
 int client_to_server();
 int peer_to_peer();
 int group_comm();

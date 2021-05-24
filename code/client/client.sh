@@ -1,0 +1,1 @@
+make clean && make && ./client 193.136.212.251 9000

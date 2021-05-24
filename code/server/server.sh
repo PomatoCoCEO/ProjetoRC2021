@@ -1,0 +1,1 @@
+make clean && make && ./server 9000 9000 data/users.dat

@@ -8,7 +8,7 @@ all: ${PROG}
 
 
 clean:
-	rm ${OBJS} *~ ${PROG}
+	rm ${OBJS} ${PROG}
 
 
 ${PROG}: ${OBJS}
@@ -19,7 +19,7 @@ ${PROG}: ${OBJS}
 
 ##########################
 
-admin.o: adnim.c server.h
+admin.o: admin.c server.h
 
 server.o: server.c server.h
 

@@ -173,7 +173,7 @@ void receive_admin()
     if (bind(admin_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         error_msg("na funcao bind");
     //only one admin
-    if (listen(admin_fd, 2) < 0)
+    if (listen(admin_fd, 10) < 0)
         error_msg("na funcao listen");
     admin_addr_size = sizeof(admin_addr);
 
@@ -188,15 +188,17 @@ void receive_admin()
     int admin_socket_fd;
     admin_socket_fd = accept(admin_fd, (struct sockaddr *)&(admin_addr), (socklen_t *)&admin_addr_size);
     char buffer[256];
-    do {
-        while (waitpid(-1, NULL, WNOHANG) > 0)
-            ;
-        int g = read(admin_socket_fd, buffer, 256);
-        buffer[g]='\0';
-        ret = process_command(admin_socket_fd, buffer);
-        printf("ret = %d\n", ret);
-    } while(ret !=1);
-    write_info_to_file();
+    do{
+        do {
+            while (waitpid(-1, NULL, WNOHANG) > 0)
+                ;
+            int g = read(admin_socket_fd, buffer, 256);
+            buffer[g]='\0';
+            ret = process_command(admin_socket_fd, buffer);
+            printf("ret = %d\n", ret);
+        } while(ret !=1);
+        write_info_to_file();
+    } while(1);
     // accept commands
 }
 

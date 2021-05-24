@@ -8,7 +8,7 @@ all: ${PROG}
 
 
 clean:
-	rm ${OBJS} *~ ${PROG}
+	rm ${OBJS} ${PROG}
 
 
 ${PROG}: ${OBJS}
@@ -20,6 +20,6 @@ ${PROG}: ${OBJS}
 ##########################
 
 
-client.o: client.c client.h
+client.o: client.c  client.h  
 
 client: client.o
