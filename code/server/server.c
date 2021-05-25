@@ -1,5 +1,11 @@
 #include "server.h"
 
+pthread_t admin_pid;
+int sock_udp, msqid, admin_fd;
+server_info_t shinfo;
+int client_port, config_port;
+socklen_t slen;
+
 void error_msg(char *msg)
 {
     fprintf(stderr, "Error: %s -> %s\n", msg, strerror(errno));
@@ -11,8 +17,7 @@ void wrong_command(int fd, char *error_msg) // answer to client
     write(fd, error_msg, 1 + strlen(error_msg));
 }
 
-void get_info_from_file(){
-    
+void get_info_from_file(){   
     FILE * config= fopen (CONFIG_FILE, "r");
     size_t sz = 256;
     char* ptr = (char*)malloc(256*sizeof(char));
@@ -37,37 +42,16 @@ void get_info_from_file(){
             break;
         }
         
-        shmem->users[i].online=0;
-        shmem->users[i++]=user;
+        user.online=0;
+        shinfo.users[i++]=user;
         
     }
-    shmem->no_users=i;
-    shmem->no_groups=0;
+    shinfo.no_users=i;
+    shinfo.no_groups=0;
 
     fclose(config);
 }
 
-void get_shared_memory()
-{ // shared memory to go between processes
-    int shmid = shmget(IPC_PRIVATE, sizeof(shm_t), IPC_CREAT | IPC_EXCL | 0766);
-    if (shmid == -1)
-    {
-        error_msg("Problems obtaining shared memory");
-    }
-    if ((shmem = shmat(shmid, NULL, 0)) == (shm_t *)-1)
-    {
-        error_msg("Problems attaching shared memory");
-    }
-}
-
-void send_msg_to_user(int pos, int pos_dest, msg_t * msg) {
-    // pos está correto
-    msg_t buf;
-    //bzero(buf, sizeof(buf));
-    sprintf(buf.msg, "NEW MESSAGE FROM %s: %s",shmem->users[pos].userId, msg->msg);
-    buf.userNo= pos_dest+1;
-    sendto(sock_udp, &buf, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos_dest].ip_address), slen);
-}
 
 int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
     int i;
@@ -75,16 +59,18 @@ int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
     #ifdef DEBUG_LOGIN
     printf("Username received: \"%s\"\n", buf);
     #endif
-    for(i = 0; i<shmem->no_users; i++) {
+    for(i = 0; i<shinfo.no_users; i++) {
         #ifdef DEBUG_LOGIN
-	    printf("Comparing against \"%s\"\n", shmem->users[i].userId);
+	    printf("Comparing against \"%s\"\n", shinfo.users[i].userId);
         #endif
-        if(strcmp(shmem->users[i].userId, buf)==0) {
-            if(shmem->users[i].ip_address.sin_addr.s_addr == client_ip->sin_addr.s_addr) {
-                shmem->users[i].ip_address = *client_ip;
+        if(strcmp(shinfo.users[i].userId, buf)==0) {
+            if(shinfo.users[i].ip_address.sin_addr.s_addr == client_ip->sin_addr.s_addr) {
+                shinfo.users[i].ip_address = *client_ip;
                 #ifdef DEBUG_LOGIN
 		        printf("Returning %d...\n", i);
                 #endif
+                if (shinfo.users[i].online==1)
+                    return -3;
                 return i;
             }
             return -1;
@@ -94,174 +80,52 @@ int verify_userId(msg_t* msg, struct sockaddr_in* client_ip) {
 } 
 
 int find_user(msg_t* msg) {
-    for(int i = 0; i<shmem->no_users; i++) {
-        if(strcmp(shmem->users[i].userId, msg->msg)==0) {
+    for(int i = 0; i<shinfo.no_users; i++) {
+        if(strcmp(shinfo.users[i].userId, msg->msg)==0) {
             return i;
         }
     }
     return -1;
 }
 
-int find_group(char group[]) {
-    printf("Comparing against %s\n", group);
-    for(int i = 0; i<shmem->no_groups; i++) {
-        if(strcmp(shmem->groups[i].name, group)==0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-void handle_c2s(int pos, msg_t* ans, int sock_fd) {
-    sprintf(ans->msg, "DESTINATION USER");
-    ans->userNo = pos+1;
-    sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-
-    if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) { // it's a pointer
-        error_msg("Error receiving from message queue ");
+void receive_message(msg_t* msg, int pos) { // pos e a posição do utilizador na Array: para ter a pos na message queue e preciso adicionar 1
+    if(msgrcv(msqid, msg, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) { 
+        error_msg("receiving from message queue ");
         return;
     }
-    // processar -> int find_user
-    int pos_dest = find_user(ans);
-    printf("pos_dest = %d\n", pos_dest);
-    if(pos_dest == -1) {
-        sprintf(ans->msg, "USER NOT FOUND");
-        sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        return;
-    }else{
-        if(shmem->users[pos_dest].online ==1)
-        {
-            sprintf(ans->msg, "ENTER MESSAGE");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
-                error_msg("Error receiving message to send from message queue");
-                return;
-            }
-
-            send_msg_to_user(pos, pos_dest, ans ); // NEW MESSAGE from paulocorte: (...)
-            sprintf(ans->msg, "MESSAGE SENT");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        } else{
-            sprintf(ans->msg, "USER OFFLINE");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            return;
-        }
-    }
-        
-}
-
-void handle_p2p(int pos, msg_t* ans, int sock_fd){
-    sprintf(ans->msg, "DESTINATION USER");
-    sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-
-    if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
-        error_msg("Error receiving from message queue ");
-        return;
-    }
-    // processar -> int find_user
-    int pos_dest = find_user(ans);
-    printf("pos_dest = %d\n", pos_dest);
-    if(pos_dest == -1) {
-        sprintf(ans->msg, "USER NOT FOUND");
-        sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        return;
-    }else{
-        if(shmem->users[pos_dest].online==1)
-        {
-            // char buf[256];
-            msg_t msg;
-            msg.userNo=pos+1;
-            char ip[20];
-            inet_ntop(AF_INET, &(shmem->users[pos_dest].ip_address.sin_addr),ip, INET_ADDRSTRLEN);
-            sprintf(msg.msg, "IP ADDRESS:%s:%d", ip, shmem->users[pos_dest].ip_address.sin_port);
-            printf("%s\n", msg.msg);
-            sendto(sock_udp, &msg, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            
-        } else{
-            sprintf(ans->msg, "USER OFFLINE");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            return;
-        }
+    if(strcmp(msg->msg, "EXIT_ALL") == 0) {
+        printf("Handler for user %d exiting...\n", pos);
+        shinfo.users[pos].online=0;
+        pthread_exit(NULL);
     }
 }
-
-
-void handle_group(int pos, msg_t* ans, int sock_fd) {
-    sprintf(ans->msg, "GROUP NAME");
-    sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-    if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
-        error_msg("Error receiving from message queue ");
-        return;
-    }
-    char * group_name = ans->msg;
-    if(strstr(group_name, "NEW GROUP:") == group_name) { // criação de novo grupo
-        /*/*sprintf(ans->msg, "NEW GROUP NAME");
-        sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        if(msgrcv(msqid, ans, sizeof(msg_t)-sizeof(long), pos+1, 0) == -1) {
-            error_msg("Error receiving from message queue ");
-            return;
-        }*/
-        strtok(ans->msg, ":");
-        char* group_name = strtok(NULL, "\n");
-        if(group_name == NULL) {
-            printf("Group name not obtained!\n");
-            return;
-        }
-        int pos_group = find_group(group_name);
-        if(pos_group == -1) {
-            int pos_new = shmem->no_groups;
-            // if(pos_new >= NO_MAX_GROUPS) group limit exceeded!
-            char ip_address[20];
-            bzero(ip_address, sizeof(ip_address));
-            sprintf(ip_address, "224.1.0.%d", pos_new);
-            inet_pton(AF_INET, ip_address, &(shmem->groups[pos_new].ip_address.sin_addr));
-            shmem->no_groups++;
-            int port_no = 9001+pos_new;
-            shmem->groups[pos_new].ip_address.sin_port = htons(port_no); // ???
-            strcpy(shmem->groups[pos_new].name, group_name);
-            sprintf(ans->msg, "IP ADDRESS:%s:%d", ip_address, port_no);
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        } else{
-            sprintf(ans->msg, "GROUP NAME INVALID");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            return;
-        }
-
-    } else if(strstr(ans->msg, "FIND GROUP:")==ans->msg){
-        strtok(ans->msg, ":");
-        char* group_name = strtok(NULL, ":");
-        if(group_name == NULL) {
-            printf("Group name not obtained!\n");
-            return;
-        }
-        int pos_group = find_group(group_name);
-        if(pos_group >= 0) {
-            char ip_address[20]; bzero(ip_address, sizeof(ip_address));
-            inet_ntop(AF_INET, &(shmem->groups[pos_group].ip_address.sin_addr),ip_address, INET_ADDRSTRLEN);
-            int port = htons(shmem->groups[pos_group].ip_address.sin_port);
-            sprintf(ans->msg, "IP ADDRESS:%s:%d",ip_address, port);
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-        }
-        else{
-            sprintf(ans->msg, "GROUP NOT FOUND");
-            sendto(sock_udp, ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
-            return;
-        }
-    }
-    // processar -> int find_user
-    // int pos_dest = find_user(ans);
-   
-}
-
 
 
 void cleanup(int signo) {
-    while(wait(NULL)!=-1);
-    close(sock_udp);
+    if (close(sock_udp) == -1)
+    {
+        perror("ERROR: Failed to close sock_udp\n");
+        exit(1);
+    }
+    if (close(admin_fd) == -1)
+    {
+        perror("ERROR: Failed to close admin_fd\n");
+        exit(1);
+    }
+    if (msgctl(msqid, IPC_RMID, 0) == -1)
+    {
+        perror("ERROR: Failed to destroy message queue\n");
+        exit(1);
+    }
     exit(0);
 }
 
-void process_client(int pos, struct sockaddr_in client_ip,int sock_fd) {
+void* process_client(void* args) {
+    // int pos, struct sockaddr_in client_ip,int sock_fd
+    user_info* aid = (user_info*) args;
+    int pos = aid-shinfo.users;
+    int sock_fd = sock_udp;
+    // struct sockaddr_in client_ip = aid->ip_address;
     // char password[];
     // ! create new socket for this client
     msg_t password, ans;
@@ -273,25 +137,26 @@ void process_client(int pos, struct sockaddr_in client_ip,int sock_fd) {
         error_msg("Error receiving from message queue ");
     }
 
-    if(strcmp(password.msg, shmem->users[pos].password)!=0) {
+    if(strcmp(password.msg, shinfo.users[pos].password)!=0) {
         msg_t password_incorrect;
         password_incorrect.userNo=pos+1;
         sprintf(password_incorrect.msg, "PASSWORD INCORRECT");
-        sendto(sock_fd, &password_incorrect, sizeof(password_incorrect),0, (struct sockaddr*) &(shmem->users[pos].ip_address), slen);
+        sendto(sock_fd, &password_incorrect, sizeof(password_incorrect),0, (struct sockaddr*) &(shinfo.users[pos].ip_address), slen);
         close(sock_fd);
-        return;
+        pthread_exit(NULL);
     }
-    shmem->users[pos].online=1;
-    int perm = (int) shmem->users[pos].permissions;
+    shinfo.users[pos].online=1;
+    int perm = (int) shinfo.users[pos].permissions;
     sprintf(ans.msg, "%d\n",perm);
     ans.userNo=pos+1;
-    sendto(sock_udp, &ans, sizeof(msg_t),0,(struct sockaddr *) &(shmem->users[pos].ip_address), slen);
+    sendto(sock_udp, &ans, sizeof(msg_t),0,(struct sockaddr *) &(shinfo.users[pos].ip_address), slen);
     while(1){
         // "P2P" "C2S" "GROUP"
         msg_t type;
-        if(msgrcv(msqid, &type, sizeof(type)-sizeof(long), pos+1, 0) == -1) {
+        /*if(msgrcv(msqid, &type, sizeof(type)-sizeof(long), pos+1, 0) == -1) { // handle EXIT...
             error_msg("Error receiving from message queue ");
-        }
+        }*/
+        receive_message(&type, pos);
     
         if(strcmp(type.msg, "P2P")==0) {
             handle_p2p(pos, &ans, sock_fd);
@@ -317,7 +182,8 @@ int main(int argc, char **argv)
     struct sockaddr_in si_server, si_client;
     slen = sizeof(si_client);
     //printf("Boo\n");
-    get_shared_memory();
+    // get_shared_memory();
+    bzero(&shinfo, sizeof(shinfo));
     //printf("Boo\n");
     get_info_from_file();
     //printf("Boo\n");
@@ -330,11 +196,8 @@ int main(int argc, char **argv)
     client_port = atoi(argv[1]);
     config_port = atoi(argv[2]);
     strcpy(configFile, argv[3]);
-    if ((admin_pid = fork()) == 0)
-    {
-        receive_admin(); // aqui n será melhor while(1) receive_admin(); ??
-        exit(0);
-    }
+    pthread_create(&admin_pid, NULL, receive_admin, NULL);
+    // pthread_create(&(groups.group[pos_group].thread),NULL, read_group_messages, &(groups.group[pos_group]));
     // wait for client connections -> INITIALISE UDP socket
     // TODO udp connection
     if((msqid = msgget(IPC_PRIVATE, IPC_CREAT|0766))<0) {
@@ -343,8 +206,10 @@ int main(int argc, char **argv)
         exit(1);
     }
     // Cria um socket para recepção de pacotes UDP
-    if ((sock_udp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+    if ((sock_udp = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1){
         error_msg("Error creating socket");
+        exit(1);
+    }
 
     // Preenchimento da socket address structure
     si_server.sin_family = AF_INET;
@@ -357,7 +222,6 @@ int main(int argc, char **argv)
     
     while (1) {
         // char buf[256];
-        while(waitpid(-1, NULL, WNOHANG)>0);
         msg_t buf, ans;
         if(recvfrom(sock_udp, &buf, sizeof(msg_t),0,(struct sockaddr *) &si_client, &slen) == -1) {
 		    error_msg("Error in recvfrom");
@@ -385,24 +249,32 @@ int main(int argc, char **argv)
                     sprintf(ans.msg, "NONEXISTENT USER");
                     sendto(sock_udp, &ans, sizeof(msg_t),0,(struct sockaddr *) &si_client, slen);
                     break;
+                case -3:
+                    sprintf(ans.msg, "ALREADY ONLINE");
+                    sendto(sock_udp, &ans, sizeof(msg_t),0,(struct sockaddr *) &si_client, slen);
+                    break;
                 default:
-                    inet_ntop(AF_INET, &(shmem->users[ret].ip_address.sin_addr),ip_address_client, INET_ADDRSTRLEN);
-                    sprintf(ans.msg, "%s", ip_address_client);
+                    printf("Boo\n");
+                    inet_ntop(AF_INET, &(shinfo.users[ret].ip_address.sin_addr),ip_address_client, INET_ADDRSTRLEN);
+                    printf("Boo\n");
+                    sprintf(ans.msg, "%s\n", ip_address_client);
                     ans.userNo = ret+1; // beware of ZERO
                     sendto(sock_udp, &ans, sizeof(msg_t), 0, (struct sockaddr *)&si_client, slen);
                     // maybe save pid
-                    if(fork()==0){
+                    // pthread_create(&(groups.group[pos_group].thread),NULL, read_group_messages, &(groups.group[pos_group]));
+                    pthread_create(&(shinfo.users[ret].thread),NULL, process_client, (void*)&(shinfo.users[ret]));
+                    /*if(fork()==0){
                         process_client(ret, si_client, sock_udp);
                         exit(0);
-                    } 
+                    } */
                     break;
             }
             // Para ignorar o restante conteúdo (anterior do buffer)
             
-
             
         }
     }
+    cleanup(0);
     return 0;
 }
 

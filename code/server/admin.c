@@ -1,5 +1,10 @@
 #include "server.h"
 
+extern int sock_udp, msqid, admin_fd;
+extern server_info_t shinfo;
+extern socklen_t slen;
+extern int client_port, config_port;
+
 void print_user_info(int fd, user_info* user) {
     const char* aid[2]={"No", "Yes"};
     char ip_addr[16];
@@ -17,10 +22,10 @@ void print_user_info(int fd, user_info* user) {
 }
 
 int remove_from_list(char * name){
-    for (int i=0; i< shmem->no_users; ++i){
-        if (strcasecmp(name, shmem->users[i].userId)==0){
-            shmem->users[i] = shmem->users[--shmem->no_users];
-            bzero(&(shmem->users[shmem->no_users]), sizeof(user_info));
+    for (int i=0; i< shinfo.no_users; ++i){
+        if (strcasecmp(name, shinfo.users[i].userId)==0){
+            shinfo.users[i] = shinfo.users[--shinfo.no_users];
+            bzero(&(shinfo.users[shinfo.no_users]), sizeof(user_info));
             return 0;
         }
     }
@@ -33,16 +38,19 @@ int process_command(int admin_fd_socket, char instruction[])
     // memset(command, 0, 256);
     command = strtok(instruction, " \r\n");
     printf("Command: \"%s\"\n", command);
+    if(command == NULL) {
+        return 2;
+    }
     if (strcmp(command, "LIST") == 0)
     {
-        if(shmem->no_users==0) {
+        if(shinfo.no_users==0) {
             wrong_command(admin_fd_socket,"No users in database\n");
             return 2;
         }
         char msg[]="User-id IP Password Cliente-Servidor P2P Grupo\n";
         write(admin_fd_socket, msg, strlen(msg));
-        for(int i = 0; i<shmem->no_users; i++) {
-            print_user_info(admin_fd_socket, &(shmem->users[i]));
+        for(int i = 0; i<shinfo.no_users; i++) {
+            print_user_info(admin_fd_socket, &(shinfo.users[i]));
         }
         return 0;
     }
@@ -105,13 +113,14 @@ int process_command(int admin_fd_socket, char instruction[])
         }
         new.permissions = perm;
         // write "User added:"
-        for(int i = 0; i<shmem->no_users;i++) {
-            if(strcmp(new.userId , shmem->users[i].userId)==0) {
+        for(int i = 0; i<shinfo.no_users;i++) {
+            if(strcmp(new.userId , shinfo.users[i].userId)==0) {
                 wrong_command(admin_fd_socket, "The user you are trying to add already exists!\n");
                 return 2;
             }
         }
-        shmem->users[shmem->no_users++]=new;
+        new.online=0;
+        shinfo.users[shinfo.no_users++]=new;
         char* msg = "User added successfully:\n";
         write(admin_fd_socket, msg, strlen(msg));
         print_user_info(admin_fd_socket, &new);
@@ -150,10 +159,7 @@ int process_command(int admin_fd_socket, char instruction[])
     }
 }
 
-
-
-
-void receive_admin()
+void* receive_admin(void* args)
 {
 
     struct sockaddr_in server_addr, admin_addr;
@@ -166,7 +172,7 @@ void receive_admin()
     server_addr.sin_port = htons(config_port);
 
     // for reading administration commands -> INITIALISE TCP SOCKET
-    int admin_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    admin_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (admin_fd < 0)
         error_msg("Problems obtaining TCP socket for admin!\n");
 
@@ -186,31 +192,32 @@ void receive_admin()
     // while (1) // supõe-se que
     int ret;
     int admin_socket_fd;
-    admin_socket_fd = accept(admin_fd, (struct sockaddr *)&(admin_addr), (socklen_t *)&admin_addr_size);
-    char buffer[256];
     do{
+        admin_socket_fd = accept(admin_fd, (struct sockaddr *)&(admin_addr), (socklen_t *)&admin_addr_size);
+        char buffer[256];
         do {
-            while (waitpid(-1, NULL, WNOHANG) > 0)
-                ;
             int g = read(admin_socket_fd, buffer, 256);
+            if(g<=0) {
+                printf("Error obtaining command...\n");
+                break;
+            }
             buffer[g]='\0';
             ret = process_command(admin_socket_fd, buffer);
             printf("ret = %d\n", ret);
         } while(ret !=1);
         write_info_to_file();
+        close (admin_socket_fd);
     } while(1);
     // accept commands
 }
 
-
-
 void write_info_to_file(){
     FILE * config= fopen (CONFIG_FILE, "w");
     char ip[16];
-    printf("Number of users: %d\n", shmem->no_users);
-    for (int i=0; i<shmem->no_users; ++i){
-        inet_ntop( AF_INET,&((shmem->users[i].ip_address.sin_addr)), ip, INET_ADDRSTRLEN );
-        fprintf(config, "%s %s %s %d\n", shmem->users[i].userId, ip, shmem->users[i].password, (int) shmem->users[i].permissions );
+    printf("Number of users: %d\n", shinfo.no_users);
+    for (int i=0; i<shinfo.no_users; ++i){
+        inet_ntop( AF_INET,&((shinfo.users[i].ip_address.sin_addr)), ip, INET_ADDRSTRLEN );
+        fprintf(config, "%s %s %s %d\n", shinfo.users[i].userId, ip, shinfo.users[i].password, (int) shinfo.users[i].permissions );
     }
     fclose(config);
 }
